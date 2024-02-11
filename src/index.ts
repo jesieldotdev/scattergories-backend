@@ -17,15 +17,79 @@ interface Player {
   id: string;
   name: string;
 }
+interface Room {
+  id: string;
+  name: string;
+  players: Player[];
+}
+
+interface UserFormTopics {
+  Nome: string;
+  Lugar: string;
+  Animal: string;
+  Cor: string;
+  Comida: string;
+  Objeto: string;
+  'Profissão': string;
+  FDN: string;
+  'Parte do corpo': string;
+}
+
+interface SendForm{
+  userId: string
+  form: UserFormTopics
+}
 
 const players: Player[] = [];
+const rooms: Room[] = [];
+
+console.log(rooms)
+
+function generateRoomId(): string {
+  // Lógica para gerar um ID único para a sala
+  // Isso pode ser um UUID ou qualquer outra estratégia de geração de ID
+  return Math.random().toString(36).substr(2, 9);
+}
 
 io.on('connection', (socket: Socket) => {
   console.log('Novo jogador conectado');
 
+  socket.on('createRoom', (roomName: string) => {
+    const roomId = generateRoomId(); // Gere um ID único para a sala
+    const newRoom: Room = { id: roomId, name: roomName, players: [] };
+    rooms.push(newRoom);
+    io.emit('updateRooms', rooms);
+  });
+
+  socket.on('joinRoom', (roomId: string) => {
+    const room = rooms.find((room) => room.id === roomId);
+    if (room) {
+      room.players.push({ id: socket.id, name: 'Player' + (room.players.length + 1) });
+      io.emit('updateRooms', rooms);
+    } else {
+      console.log(`Sala não encontrada com o ID ${roomId}`);
+    }
+  });
+
+  socket.on('updateName', (newName: string) => {
+    const playerIndex = players.findIndex((player) => player.id === socket.id);
+    if (playerIndex !== -1) {
+      players[playerIndex].name = newName;
+      io.emit('updatePlayers', players);
+    }
+  });
+
+  socket.on('sendForm', (userForm: SendForm) => {
+    console.log('Formulário recebido do jogador:', userForm);
+
+  
+    io.emit('formReceived', `Formulário recebido com sucesso do jogador ${userForm.userId}`);
+  });
+
   players.push({ id: socket.id, name: 'Player' + (players.length + 1) });
 
   io.emit('updatePlayers', players);
+  io.emit('updateRooms', rooms);
 
   socket.on('submitAnswer', (answer: string) => {
     console.log(`${socket.id} enviou a resposta: ${answer}`);
