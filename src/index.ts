@@ -175,6 +175,7 @@ function startTimerForRoom(room: RoomState) {
     io.emit("updateRooms", rooms);
     if (room.timer <= 0) {
       io.to(room.id).emit("endRound", room.currentRound);
+      io.to(room.id).emit("startRound", undefined);
       room.currentRound++;
       validateAnswers(room.id);
       getScores(room.id);
@@ -196,6 +197,7 @@ function startGameForRoom(room: RoomState) {
   // io.emit("updateRooms", rooms);
   io.emit("gameStarted", room.currentRound);
   io.to(room.id).emit("endRound", undefined);
+  io.to(room.id).emit("startRound", room.currentRound);
 }
 
 io.on("connection", (socket: Socket) => {
