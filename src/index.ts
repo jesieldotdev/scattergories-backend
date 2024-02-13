@@ -20,10 +20,9 @@ interface Player {
 }
 
 interface Score extends Player {
-  hits: number
-  points: number
+  hits: number;
+  points: number;
 }
-
 
 interface RoomState {
   id: string;
@@ -34,8 +33,8 @@ interface RoomState {
   timer: number;
   letter: string;
   answers: Answers[];
-  winner: Score | undefined
-  scores: Score[]
+  winner: Score | undefined;
+  scores: Score[];
 }
 interface UserFormTopics {
   Nome: string;
@@ -51,12 +50,12 @@ interface UserFormTopics {
 
 interface SendForm {
   userID: string;
-  userName: string
+  userName: string;
   form: UserFormTopics;
 }
 interface Answers {
   userID: string;
-  userName: string
+  userName: string;
   form: UserFormTopics;
   hits: number;
 }
@@ -71,7 +70,7 @@ function generateRoomId(): string {
 }
 
 function getScores(roomID: string) {
-  if(rooms.length){
+  if (rooms.length) {
     const room = rooms.find((item) => item.id === roomID);
     if (room) {
       const res: Score[] = [];
@@ -84,24 +83,26 @@ function getScores(roomID: string) {
             }
             room.scores.push({
               id: form.userID,
-              name: room.players.find(item => item.id === form.userID)?.name,
+              name: room.players.find((item) => item.id === form.userID)?.name,
               hits: data.filter((item) => item === true).length,
-              points: data.filter((item) => item === true).length * 10
+              points: data.filter((item) => item === true).length * 10,
             });
           }
-
         });
       }
-  
+
       if (room.scores.length > 0) {
-        const winnerHits = Math.max(...room.scores.map((player) => player.hits));
-        const winnerPlayer = room.scores.find((player) => player.hits === winnerHits);
-  
+        const winnerHits = Math.max(
+          ...room.scores.map((player) => player.hits)
+        );
+        const winnerPlayer = room.scores.find(
+          (player) => player.hits === winnerHits
+        );
+
         room.winner = winnerPlayer;
       }
     }
   }
-
 }
 
 function validateString(word: string, letter: string) {
@@ -129,14 +130,14 @@ function validateAnswers(roomID: string) {
                 form.form[key as keyof UserFormTopics] = startsWithA;
               }
             }
-            form.userName
+            form.userName;
           }
 
           room.answers.push(form);
         }
       });
     }
-    console.log(room)
+    console.log(room);
     // io.emit("updateAnswers", answers);
   }
   //   const mockForm =
@@ -173,9 +174,10 @@ function startTimerForRoom(room: RoomState) {
     room.timer--;
     io.emit("updateRooms", rooms);
     if (room.timer <= 0) {
+      io.to(room.id).emit("endRound", room.currentRound);
       room.currentRound++;
       validateAnswers(room.id);
-      getScores(room.id)
+      getScores(room.id);
       io.emit("updateRooms", rooms);
       clearInterval(timerInterval);
     } else {
@@ -185,14 +187,15 @@ function startTimerForRoom(room: RoomState) {
 }
 
 function startGameForRoom(room: RoomState) {
-  room.timer = 8;
-  room.winner = undefined
-  room.scores = []
+  room.timer = room.duration ;
+  room.winner = undefined;
+  room.scores = [];
+  answers = [];
   startTimerForRoom(room);
-  answers = []
   io.emit("updateAnswers", answers);
-  io.emit("updateRooms", rooms);
+  // io.emit("updateRooms", rooms);
   io.emit("gameStarted", room.currentRound);
+  io.to(room.id).emit("endRound", undefined);
 }
 
 io.on("connection", (socket: Socket) => {
@@ -203,12 +206,12 @@ io.on("connection", (socket: Socket) => {
       name: roomName,
       players: [],
       currentRound: 1,
-      duration: 8,
-      timer: 8,
+      duration: 60, 
+      timer: 60,
       letter: "a",
       answers: [],
       scores: [],
-      winner: undefined
+      winner: undefined,
     };
     rooms.push(newRoom);
     io.emit("updateRooms", rooms);
@@ -219,6 +222,11 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("joinRoom", (roomId: string) => {
     const room = rooms.find((room) => room.id === roomId);
+    if (!room) {
+      console.log(`Sala não encontrada com o ID ${roomId}`);
+      return;
+    }
+    socket.join(roomId);
     const inRoom = room?.players.findIndex((player) => player.id === socket.id);
     if (inRoom === -1) {
       if (room) {
@@ -237,8 +245,6 @@ io.on("connection", (socket: Socket) => {
           });
         }
         io.emit("updateRooms", rooms);
-      } else {
-        console.log(`Sala não encontrada com o ID ${roomId}`);
       }
     } else {
       console.log(
@@ -272,11 +278,12 @@ io.on("connection", (socket: Socket) => {
     io.emit("formReceived", forms);
   });
 
-  socket.on("startGame", (roomID: string) => {
+  socket.on("startGame", (roomID: string, letter: string) => {
     const room = rooms.find((room) => room.id === roomID);
     if (!room) {
       return;
     }
+    room.letter = letter
     startGameForRoom(room);
   });
 
