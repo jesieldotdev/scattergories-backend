@@ -1,28 +1,42 @@
-import express from 'express';
-import http from 'http';
-import { Server, Socket } from 'socket.io';
-import cors from "cors"
+import express, { Router } from "express";
+import http from "http";
+import { Server, Socket } from "socket.io";
+import cors from "cors";
 
 const app = express();
-app.use(cors())
+app.use(cors());
 const server = http.createServer(app);
 
-  const io = new Server(server, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"],
-    },
-  });
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+});
+
 interface Player {
   id: string;
   name: string;
 }
-interface Room {
+
+interface Score extends Player {
+  hits: number
+  points: number
+}
+
+
+interface RoomState {
   id: string;
   name: string;
   players: Player[];
+  currentRound: number;
+  duration: number;
+  timer: number;
+  letter: string;
+  answers: Answers[];
+  winner: Score | undefined
+  scores: Score[]
 }
-
 interface UserFormTopics {
   Nome: string;
   Lugar: string;
@@ -30,145 +44,257 @@ interface UserFormTopics {
   Cor: string;
   Comida: string;
   Objeto: string;
-  'Profissão': string;
+  Profissão: string;
   FDN: string;
-  'Parte do corpo': string;
+  "Parte do corpo": string;
 }
 
-interface SendForm{
-  userId: string
-  form: UserFormTopics
+interface SendForm {
+  userID: string;
+  userName: string
+  form: UserFormTopics;
+}
+interface Answers {
+  userID: string;
+  userName: string
+  form: UserFormTopics;
+  hits: number;
 }
 
 const players: Player[] = [];
-const rooms: Room[] = [];
-
-console.log(rooms)
+const rooms: RoomState[] = [];
+const forms: SendForm[] = [];
+let answers: Answers[] = [];
 
 function generateRoomId(): string {
-  // Lógica para gerar um ID único para a sala
-  // Isso pode ser um UUID ou qualquer outra estratégia de geração de ID
   return Math.random().toString(36).substr(2, 9);
 }
 
-io.on('connection', (socket: Socket) => {
-  console.log('Novo jogador conectado');
+function getScores(roomID: string) {
+  if(rooms.length){
+    const room = rooms.find((item) => item.id === roomID);
+    if (room) {
+      const res: Score[] = [];
+      if (room.answers) {
+        room.answers.forEach((form) => {
+          const data = [];
+          if (form) {
+            for (const key in form.form) {
+              data.push(form.form[key]);
+            }
+            room.scores.push({
+              id: form.userID,
+              name: room.players.find(item => item.id === form.userID)?.name,
+              hits: data.filter((item) => item === true).length,
+              points: data.filter((item) => item === true).length * 10
+            });
+          }
 
-  socket.on('createRoom', (roomName: string) => {
-    const roomId = generateRoomId(); // Gere um ID único para a sala
-    const newRoom: Room = { id: roomId, name: roomName, players: [] };
+        });
+      }
+  
+      if (room.scores.length > 0) {
+        const winnerHits = Math.max(...room.scores.map((player) => player.hits));
+        const winnerPlayer = room.scores.find((player) => player.hits === winnerHits);
+  
+        room.winner = winnerPlayer;
+      }
+    }
+  }
+
+}
+
+function validateString(word: string, letter: string) {
+  if (word && word !== "" && word.toLowerCase() === letter.toLowerCase()) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function validateAnswers(roomID: string) {
+  if (rooms.length) {
+    const room = rooms.find((item) => item.id === roomID);
+    if (room) {
+      room.players.map((player) => {
+        if (forms.findIndex((form) => form.userID === player.id) !== -1) {
+          const form = forms.find((form) => form.userID === player.id);
+          if (form) {
+            for (const key in form.form) {
+              if (form.form) {
+                const startsWithA = validateString(
+                  form.form[key as keyof UserFormTopics][0],
+                  room.letter
+                );
+                form.form[key as keyof UserFormTopics] = startsWithA;
+              }
+            }
+            form.userName
+          }
+
+          room.answers.push(form);
+        }
+      });
+    }
+    console.log(room)
+    // io.emit("updateAnswers", answers);
+  }
+  //   const mockForm =
+  //     {
+  //       userID: 'bbFRUMoic_gLw2pTAAAP',
+  //       form: {
+  //         Nome: 'asd',
+  //         Lugar: 'asd',
+  //         Animal: 'asd',
+  //         Cor: 'asdasd',
+  //         Comida: 'asd',
+  //         Objeto: 'asd',
+  //         'Profissão': 'asd',
+  //         FDN: 'ssd',
+  //         'Parte do corpo': 'as'
+  //       },
+  //       hits: 0
+  //     } as SendForm
+
+  //     for (const key in mockForm.form) {
+  //       const startsWithA = mockForm.form[key as keyof UserFormTopics][0].toLowerCase() === 'a';
+  //       mockForm.form[key as keyof UserFormTopics] = startsWithA;
+  //     }
+  // // console.log(result)
+  //     answers.push(mockForm)
+  //     console.log(answers)
+}
+
+// validateAnswers()
+
+function startTimerForRoom(room: RoomState) {
+  let timerInterval: NodeJS.Timeout;
+  timerInterval = setInterval(() => {
+    room.timer--;
+    io.emit("updateRooms", rooms);
+    if (room.timer <= 0) {
+      room.currentRound++;
+      validateAnswers(room.id);
+      getScores(room.id)
+      io.emit("updateRooms", rooms);
+      clearInterval(timerInterval);
+    } else {
+      io.emit("updateRoom", rooms);
+    }
+  }, 1000);
+}
+
+function startGameForRoom(room: RoomState) {
+  room.timer = 8;
+  room.winner = undefined
+  room.scores = []
+  startTimerForRoom(room);
+  answers = []
+  io.emit("updateAnswers", answers);
+  io.emit("updateRooms", rooms);
+  io.emit("gameStarted", room.currentRound);
+}
+
+io.on("connection", (socket: Socket) => {
+  socket.on("createRoom", (roomName: string) => {
+    const roomId = generateRoomId();
+    const newRoom: RoomState = {
+      id: roomId,
+      name: roomName,
+      players: [],
+      currentRound: 1,
+      duration: 8,
+      timer: 8,
+      letter: "a",
+      answers: [],
+      scores: [],
+      winner: undefined
+    };
     rooms.push(newRoom);
-    io.emit('updateRooms', rooms);
+    io.emit("updateRooms", rooms);
   });
 
-  socket.on('joinRoom', (roomId: string) => {
+  socket.emit("client_id", socket.id);
+  socket.emit("updateForms", forms);
+
+  socket.on("joinRoom", (roomId: string) => {
     const room = rooms.find((room) => room.id === roomId);
-    if (room) {
-      room.players.push({ id: socket.id, name: 'Player' + (room.players.length + 1) });
-      io.emit('updateRooms', rooms);
+    const inRoom = room?.players.findIndex((player) => player.id === socket.id);
+    if (inRoom === -1) {
+      if (room) {
+        if (
+          players &&
+          players.findIndex((player) => player.id === socket.id) !== -1
+        ) {
+          room.players.push({
+            id: socket.id,
+            name: players.find((player) => player.id === socket.id).name,
+          });
+        } else {
+          room.players.push({
+            id: socket.id,
+            name: "Jogador" + (room.players.length + 1),
+          });
+        }
+        io.emit("updateRooms", rooms);
+      } else {
+        console.log(`Sala não encontrada com o ID ${roomId}`);
+      }
     } else {
-      console.log(`Sala não encontrada com o ID ${roomId}`);
+      console.log(
+        `Jogador ${
+          room?.players.find((player) => player.id === socket.id).name
+        }, já está na sala`
+      );
     }
   });
 
-  socket.on('updateName', (newName: string) => {
+  socket.on("updateName", (newName: string) => {
     const playerIndex = players.findIndex((player) => player.id === socket.id);
     if (playerIndex !== -1) {
       players[playerIndex].name = newName;
-      io.emit('updatePlayers', players);
+      io.emit("updatePlayers", players);
+    } else {
+      players.push({ id: socket.id, name: newName });
     }
   });
 
-  socket.on('sendForm', (userForm: SendForm) => {
-    console.log('Formulário recebido do jogador:', userForm);
-
-  
-    io.emit('formReceived', `Formulário recebido com sucesso do jogador ${userForm.userId}`);
+  socket.on("sendForm", (userForm: SendForm) => {
+    const existingFormIndex = forms.findIndex(
+      (item) => item.userID === userForm.userID
+    );
+    if (existingFormIndex !== -1) {
+      forms[existingFormIndex].form = userForm.form;
+    } else {
+      forms.push(userForm);
+    }
+    io.emit("updateForms", forms);
+    io.emit("formReceived", forms);
   });
 
-  players.push({ id: socket.id, name: 'Player' + (players.length + 1) });
+  socket.on("startGame", (roomID: string) => {
+    const room = rooms.find((room) => room.id === roomID);
+    if (!room) {
+      return;
+    }
+    startGameForRoom(room);
+  });
 
-  io.emit('updatePlayers', players);
-  io.emit('updateRooms', rooms);
+  io.emit("updatePlayers", players);
+  io.emit("updateRooms", rooms);
 
-  socket.on('submitAnswer', (answer: string) => {
-    console.log(`${socket.id} enviou a resposta: ${answer}`);
+  socket.on("submitAnswer", (answer: string) => {
     // Lógica para processar a resposta do jogador
   });
 
-  socket.on('disconnect', () => {
-    console.log('Jogador desconectado');
+  socket.on("disconnect", () => {
     const index = players.findIndex((player) => player.id === socket.id);
     if (index !== -1) {
       players.splice(index, 1);
-      io.emit('updatePlayers', players);
+      io.emit("updatePlayers", players);
     }
   });
 });
-
-// Exemplo básico para controlar o tempo de cada rodada
-let currentRound = 1;
-const roundDurationInSeconds = 60; // por exemplo, 60 segundos por rodada
-
-io.on('connection', (socket: Socket) => {
-  // ...
-
-  socket.on('startRound', () => {
-    // Inicie uma nova rodada
-    io.emit('newRound', currentRound);
-
-    // Configure um temporizador para finalizar a rodada após o tempo especificado
-    setTimeout(() => {
-      io.emit('endRound', currentRound);
-
-      // Adicione lógica para calcular pontuações, se necessário
-      // ...
-
-      currentRound++;
-    }, roundDurationInSeconds * 1000);
-  });
-
-  // ...
-});
-
-// Exemplo básico usando um array para armazenar resultados
-const gameHistory: { round: number; scores: Record<string, number> }[] = [];
-
-io.on('connection', (socket: Socket) => {
-  // ...
-
-  socket.on('endRound', (roundData) => {
-    // Salve os resultados no histórico
-    gameHistory.push({ round: roundData.round, scores: roundData.scores });
-    io.emit('updateGameHistory', gameHistory);
-  });
-
-  // ...
-});
-
-io.on('connection', (socket: Socket) => {
-    // ...
-  
-    socket.on('submitAnswer', (answer: string) => {
-      // Adicione lógica de validação para evitar respostas inválidas
-      if (isValidAnswer(answer)) {
-        // Processar a resposta
-        io.emit('answerProcessed', { playerId: socket.id, answer });
-      } else {
-        // Resposta inválida, informar ao jogador
-        socket.emit('invalidAnswer', 'Resposta inválida');
-      }
-    });
-  
-    // ...
-  });
-  
-  function isValidAnswer(answer: string): boolean {
-    // Adicione sua lógica de validação aqui (por exemplo, evitar palavras proibidas)
-    return answer.length > 0;
-  }
-  
-
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
