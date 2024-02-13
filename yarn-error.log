@@ -1,8 +1,8 @@
 Arguments: 
-  /home/jesiel/.nvm/versions/node/v18.19.0/bin/node /usr/share/yarn/bin/yarn.js add cors @types
+  /home/jesiel/.nvm/versions/node/v18.19.0/bin/node /usr/share/yarn/bin/yarn.js add dotend
 
 PATH: 
-  /home/jesiel/.nvm/versions/node/v18.19.0/bin:/usr/local/bin:/usr/bin:/bin:/usr/games:/home/jesiel/Postman:/opt/android-studio/versao_android_studio/bin:/home/jesiel/Postman:/opt/android-studio/versao_android_studio/bin
+  /home/jesiel/.console-ninja/.bin:/home/jesiel/.nvm/versions/node/v18.19.0/bin:/usr/local/bin:/usr/bin:/bin:/usr/games:/home/jesiel/Postman:/opt/android-studio/versao_android_studio/bin
 
 Yarn version: 
   1.22.19
@@ -14,8 +14,8 @@ Platform:
   linux x64
 
 Trace: 
-  Error: https://registry.yarnpkg.com/@types: Request "https://registry.yarnpkg.com/@types" returned a 405
-      at params.callback [as _callback] (/usr/share/yarn/lib/cli.js:66154:18)
+  Error: https://registry.yarnpkg.com/dotend: Not found
+      at params.callback [as _callback] (/usr/share/yarn/lib/cli.js:66145:18)
       at self.callback (/usr/share/yarn/lib/cli.js:140890:22)
       at Request.emit (node:events:517:28)
       at Request.<anonymous> (/usr/share/yarn/lib/cli.js:141862:10)
@@ -44,7 +44,9 @@ npm manifest:
     },
     "dependencies": {
       "@types/express": "^4.17.21",
-      "@types/socket.io": "^3.0.2"
+      "@types/socket.io": "^3.0.2",
+      "cors": "^2.8.5",
+      "express": "^4.18.2"
     }
   }
 
@@ -369,7 +371,7 @@ Lockfile:
     resolved "https://registry.yarnpkg.com/cookie/-/cookie-0.4.2.tgz#0e41f24de5ecf317947c82fc789e06a884824432"
     integrity sha512-aSWTXFzaKWkvHO1Ny/s+ePFpvKsPnjc551iI41v3ny/ow6tBG5Vd+FuqGNhh1LxOmVzOlGUriIlOaokOvhaStA==
   
-  cors@~2.8.5:
+  cors@^2.8.5, cors@~2.8.5:
     version "2.8.5"
     resolved "https://registry.yarnpkg.com/cors/-/cors-2.8.5.tgz#eac11da51592dd86b9f06f6e7ac293b3df875d29"
     integrity sha512-KIHbLJqu73RGr/hnbrO9uBeixNGuvSQjul/jdFvS/KFSIH1hWVd1ng7zOHx+YrEfInLG7q4n6GHQ9cDtxv/P6g==

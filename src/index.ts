@@ -2,6 +2,7 @@ import express, { Router } from "express";
 import http from "http";
 import { Server, Socket } from "socket.io";
 import cors from "cors";
+import { AiResponse, generateResponseFromAi } from "./functions/services";
 
 const app = express();
 app.use(cors());
@@ -65,6 +66,25 @@ const rooms: RoomState[] = [];
 const forms: SendForm[] = [];
 let answers: Answers[] = [];
 
+async function validateFromAI(res: string, tip: string) {
+  const word = res;
+  const index = tip;
+  const QuestionForAi = `${word} é um ${index}? Responda com um objeto JSON  res com valor true ou false, e outro desc com uma breve descriçao do porquê. retornando somente {"res": value, "desc": value}`;
+
+  console.log(QuestionForAi)
+
+  return await generateResponseFromAi(QuestionForAi)
+    .then((res: AiResponse | void) => {
+      const text = res.candidates[0].content.parts[0].text;
+      const formated = JSON.parse(
+        text.replace("json", "").replace('J').replace("\n", "").replace(/```/g, "")
+      ) as { res: string; desc: string };
+      io.emit('updateRooms', rooms)
+      return formated;
+    })
+    .catch((err) => err);
+}
+
 function generateRoomId(): string {
   return Math.random().toString(36).substr(2, 9);
 }
@@ -105,15 +125,39 @@ function getScores(roomID: string) {
   }
 }
 
-function validateString(word: string, letter: string) {
-  if (word && word !== "" && word.toLowerCase() === letter.toLowerCase()) {
-    return true;
+async function validateString(word: string, letter: string, tip: string) {
+  let text = word
+  let index = tip
+  if (text !== "" && letter !== "" && tip !== "") {
+    text = text.replace(" ", '')
+    try {
+      if(index === 'FDN'){
+        index = 'filme, novela ou desenho'
+      }else if(index === 'Local'){
+        index = 'cidade, estado ou pais'
+        
+      }
+      const x = await validateFromAI(text, index);
+
+      if (text && text !== "" && text[0] && text[0].toLowerCase() === letter.toLowerCase()) {
+        return x;
+      } else {
+        return x;
+      }
+    } catch (error) {
+      console.error("Erro ao validar string:", error);
+      return false;
+    }
   } else {
-    return false;
+    return {
+      res: false,
+      desc: 'Resposta inválida!'
+    };
   }
 }
 
-function validateAnswers(roomID: string) {
+
+async function validateAnswers(roomID: string) {
   if (rooms.length) {
     const room = rooms.find((item) => item.id === roomID);
     if (room) {
@@ -123,21 +167,23 @@ function validateAnswers(roomID: string) {
           if (form) {
             for (const key in form.form) {
               if (form.form) {
-                const startsWithA = validateString(
-                  form.form[key as keyof UserFormTopics][0],
-                  room.letter
-                );
-                form.form[key as keyof UserFormTopics] = startsWithA;
+                validateString(
+                  form.form[key as keyof UserFormTopics],
+                  room.letter,
+                  key
+                ).then(res => {
+                  form.form[key as keyof UserFormTopics] = res
+                  form.userName;
+                  room.answers.push(form);
+                })
+                
               }
             }
-            form.userName;
           }
 
-          room.answers.push(form);
         }
       });
     }
-    console.log(room);
     // io.emit("updateAnswers", answers);
   }
   //   const mockForm =
@@ -168,16 +214,16 @@ function validateAnswers(roomID: string) {
 
 // validateAnswers()
 
-function startTimerForRoom(room: RoomState) {
+async function startTimerForRoom(room: RoomState) {
   let timerInterval: NodeJS.Timeout;
-  timerInterval = setInterval(() => {
+  timerInterval = setInterval(async () => {
     room.timer--;
     io.emit("updateRooms", rooms);
     if (room.timer <= 0) {
       io.to(room.id).emit("endRound", room.currentRound);
       io.to(room.id).emit("startRound", undefined);
       room.currentRound++;
-      validateAnswers(room.id);
+      validateAnswers(room.id)
       getScores(room.id);
       io.emit("updateRooms", rooms);
       clearInterval(timerInterval);
@@ -188,7 +234,7 @@ function startTimerForRoom(room: RoomState) {
 }
 
 function startGameForRoom(room: RoomState) {
-  room.timer = room.duration ;
+  room.timer = room.duration;
   room.winner = undefined;
   room.scores = [];
   answers = [];
@@ -208,7 +254,7 @@ io.on("connection", (socket: Socket) => {
       name: roomName,
       players: [],
       currentRound: 1,
-      duration: 60, 
+      duration: 60,
       timer: 60,
       letter: "a",
       answers: [],
@@ -285,7 +331,7 @@ io.on("connection", (socket: Socket) => {
     if (!room) {
       return;
     }
-    room.letter = letter
+    room.letter = letter;
     startGameForRoom(room);
   });
 
