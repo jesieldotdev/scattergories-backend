@@ -49,6 +49,13 @@ interface UserFormTopics {
   "Parte do corpo": string;
 }
 
+export interface AiResponseTopic {
+  res: string;
+  desc: string;
+}
+
+export type UserFormTopicsAi = Record<string, AiResponseTopic>;
+
 interface SendForm {
   userID: string;
   userName: string;
@@ -71,15 +78,17 @@ async function validateFromAI(res: string, tip: string) {
   const index = tip;
   const QuestionForAi = `${word} é um ${index}? Responda com um objeto JSON  res com valor true ou false, e outro desc com uma breve descriçao do porquê. retornando somente {"res": value, "desc": value}`;
 
-  console.log(QuestionForAi)
-
   return await generateResponseFromAi(QuestionForAi)
     .then((res: AiResponse | void) => {
       const text = res.candidates[0].content.parts[0].text;
       const formated = JSON.parse(
-        text.replace("json", "").replace('J').replace("\n", "").replace(/```/g, "")
+        text
+          .replace("json", "")
+          .replace("J")
+          .replace("\n", "")
+          .replace(/```/g, "")
       ) as { res: string; desc: string };
-      io.emit('updateRooms', rooms)
+      io.emit("updateRooms", rooms);
       return formated;
     })
     .catch((err) => err);
@@ -93,30 +102,36 @@ function getScores(roomID: string) {
   if (rooms.length) {
     const room = rooms.find((item) => item.id === roomID);
     if (room) {
-      const res: Score[] = [];
-      if (room.answers) {
-        room.answers.forEach((form) => {
-          const data = [];
-          if (form) {
-            for (const key in form.form) {
-              data.push(form.form[key]);
-            }
-            room.scores.push({
-              id: form.userID,
-              name: room.players.find((item) => item.id === form.userID)?.name,
-              hits: data.filter((item) => item === true).length,
-              points: data.filter((item) => item === true).length * 10,
-            });
-          }
-        });
-      }
+      console.log(room);
 
+      room.scores = [];
+
+      room.answers.forEach((form) => {
+        const hits = Object.values(form.form).reduce((acc, val) => {
+          // Valida se a resposta é verdadeira (res: true)
+          if (val && val.res === "true") {
+            return acc + 1;
+          }
+          return acc;
+        }, 0);
+
+        const points = hits * 10;
+
+        room.scores.push({
+          id: form.userID,
+          name: room.players.find((player) => player.id === form.userID)?.name,
+          hits: hits,
+          points: points,
+        });
+      });
+
+      // Encontrar o vencedor com base no maior número de pontos
       if (room.scores.length > 0) {
-        const winnerHits = Math.max(
-          ...room.scores.map((player) => player.hits)
+        const maxPoints = Math.max(
+          ...room.scores.map((player) => player.points)
         );
         const winnerPlayer = room.scores.find(
-          (player) => player.hits === winnerHits
+          (player) => player.points === maxPoints
         );
 
         room.winner = winnerPlayer;
@@ -126,24 +141,28 @@ function getScores(roomID: string) {
 }
 
 async function validateString(word: string, letter: string, tip: string) {
-  let text = word
-  let index = tip
-  if (text !== "" && letter !== "" && tip !== "") {
-    text = text.replace(" ", '')
+  let text = word;
+  let index = tip;
+  if (text !== "") {
+    // text = text.replace(" ", '')
     try {
-      if(index === 'FDN'){
-        index = 'filme, novela ou desenho'
-      }else if(index === 'Local'){
-        index = 'cidade, estado ou pais'
-        
+      if (index === "FDN") {
+        index = "filme, novela ou desenho";
+      } else if (index === "Local") {
+        index = "cidade, estado ou pais";
       }
       const x = await validateFromAI(text, index);
 
-      if (text && text !== "" && text[0] && text[0].toLowerCase() === letter.toLowerCase()) {
+      // if (
+      //   text &&
+      //   text !== "" &&
+      //   text[0] &&
+      //   text[0].toLowerCase() === letter.toLowerCase()
+      // ) {
         return x;
-      } else {
-        return x;
-      }
+      // } else {
+      //   return x;
+      // }
     } catch (error) {
       console.error("Erro ao validar string:", error);
       return false;
@@ -151,13 +170,12 @@ async function validateString(word: string, letter: string, tip: string) {
   } else {
     return {
       res: false,
-      desc: 'Resposta inválida!'
+      desc: "Resposta inválida!",
     };
   }
 }
 
-
-async function validateAnswers(roomID: string) {
+async function validateAnswers(roomID: string): Promise<RoomState[] | undefined> {
   if (rooms.length) {
     const room = rooms.find((item) => item.id === roomID);
     if (room) {
@@ -171,19 +189,20 @@ async function validateAnswers(roomID: string) {
                   form.form[key as keyof UserFormTopics],
                   room.letter,
                   key
-                ).then(res => {
-                  form.form[key as keyof UserFormTopics] = res
-                  form.userName;
-                  room.answers.push(form);
-                })
-                
+                ).then((res) => {
+                  form.form[key as keyof UserFormTopics] = res;
+                });
+                form.userName;
               }
             }
-          }
+            room.answers.push(form);
 
+          }
+          io.emit("updateRooms", rooms);
         }
       });
     }
+    return rooms
     // io.emit("updateAnswers", answers);
   }
   //   const mockForm =
@@ -223,8 +242,13 @@ async function startTimerForRoom(room: RoomState) {
       io.to(room.id).emit("endRound", room.currentRound);
       io.to(room.id).emit("startRound", undefined);
       room.currentRound++;
-      validateAnswers(room.id)
-      getScores(room.id);
+      validateAnswers(room.id).then((res) => {
+        // if (res !== null) {
+          console.log(res[0].answers[0].form, 'RES')
+          getScores(room.id);
+        // }
+      });
+      // getScores(room.id);
       io.emit("updateRooms", rooms);
       clearInterval(timerInterval);
     } else {
@@ -237,10 +261,11 @@ function startGameForRoom(room: RoomState) {
   room.timer = room.duration;
   room.winner = undefined;
   room.scores = [];
+  room.answers = []
   answers = [];
   startTimerForRoom(room);
   io.emit("updateAnswers", answers);
-  // io.emit("updateRooms", rooms);
+  io.emit("updateRooms", rooms);
   io.emit("gameStarted", room.currentRound);
   io.to(room.id).emit("endRound", undefined);
   io.to(room.id).emit("startRound", room.currentRound);
@@ -254,8 +279,8 @@ io.on("connection", (socket: Socket) => {
       name: roomName,
       players: [],
       currentRound: 1,
-      duration: 60,
-      timer: 60,
+      duration: 10,
+      timer: 10,
       letter: "a",
       answers: [],
       scores: [],

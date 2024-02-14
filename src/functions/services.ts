@@ -9,6 +9,8 @@ interface AiPostData{
     contents: Parts[]
 }
 
+
+  
 export interface AiResponse{
     candidates: {
         content: {
